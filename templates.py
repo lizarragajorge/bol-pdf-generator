@@ -7,7 +7,10 @@ from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 
-from data_generator import BolData
+from data_generator import (
+    BolData, InvoiceData, PackingListData, DeliveryOrderData,
+    CoverLetterData, FreightManifestData,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -739,6 +742,566 @@ def render_multimodal_bol(data: BolData, filepath: str):
     doc.build(elements)
 
 
+# ===========================================================================
+# NON-BOL TEMPLATES (negative examples for classifier)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Template: Commercial Invoice
+# ---------------------------------------------------------------------------
+
+def render_commercial_invoice(data: InvoiceData, filepath: str):
+    """Standard commercial invoice — NOT a Bill of Lading."""
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.4 * inch, bottomMargin=0.4 * inch,
+                            leftMargin=0.5 * inch, rightMargin=0.5 * inch)
+    styles = _styles()
+    accent = colors.HexColor("#1a5276")
+    elements = []
+
+    # Header
+    hdr = Table([
+        [Paragraph("COMMERCIAL INVOICE", styles["BolTitle"]),
+         Paragraph(f"Invoice No: <b>{data.invoice_number}</b>", styles["FieldValue"])],
+        [Paragraph(f"{data.seller_name}", styles["BolSubtitle"]),
+         Paragraph(f"Date: {data.invoice_date}", styles["FieldValue"])],
+    ], colWidths=[5.0 * inch, 2.5 * inch])
+    hdr.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1.5, accent),
+        ("BACKGROUND", (0, 0), (0, 0), accent),
+        ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
+        ("LINEBELOW", (0, 0), (-1, 0), 1, accent),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(hdr)
+    elements.append(Spacer(1, 8))
+
+    # Seller / Buyer
+    party = [
+        [Paragraph("<b>Seller / Exporter</b>", styles["FieldLabel"]),
+         Paragraph("<b>Buyer / Importer</b>", styles["FieldLabel"])],
+        [Paragraph(f"{data.seller_name}<br/>{data.seller_address}", styles["FieldValue"]),
+         Paragraph(f"{data.buyer_name}<br/>{data.buyer_address}", styles["FieldValue"])],
+    ]
+    pt = Table(party, colWidths=[3.75 * inch, 3.75 * inch])
+    pt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(pt)
+    elements.append(Spacer(1, 6))
+
+    # Terms row
+    terms_data = [
+        [Paragraph("Currency", styles["FieldLabel"]),
+         Paragraph("Payment Terms", styles["FieldLabel"]),
+         Paragraph("Incoterm", styles["FieldLabel"]),
+         Paragraph("Country of Origin", styles["FieldLabel"])],
+        [Paragraph(data.currency, styles["FieldValue"]),
+         Paragraph(data.payment_terms, styles["FieldValue"]),
+         Paragraph(data.incoterm, styles["FieldValue"]),
+         Paragraph(data.country_of_origin, styles["FieldValue"])],
+    ]
+    tt = Table(terms_data, colWidths=[1.875 * inch] * 4)
+    tt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    elements.append(tt)
+    elements.append(Spacer(1, 8))
+
+    # Line items
+    item_header = [
+        Paragraph("Description", styles["FieldLabel"]),
+        Paragraph("HS Code", styles["FieldLabel"]),
+        Paragraph("Qty", styles["FieldLabel"]),
+        Paragraph(f"Unit Price ({data.currency})", styles["FieldLabel"]),
+        Paragraph(f"Total ({data.currency})", styles["FieldLabel"]),
+    ]
+    item_rows = [item_header]
+    for item in data.line_items:
+        item_rows.append([
+            Paragraph(item.description, styles["FieldValue"]),
+            Paragraph(item.hs_code, styles["FieldValue"]),
+            Paragraph(str(item.quantity), styles["FieldValue"]),
+            Paragraph(f"{item.unit_price:,.2f}", styles["FieldValue"]),
+            Paragraph(f"{item.total_price:,.2f}", styles["FieldValue"]),
+        ])
+    # Totals
+    item_rows.append(["", "", "", Paragraph("<b>Subtotal</b>", styles["FieldValue"]),
+                       Paragraph(f"<b>{data.subtotal:,.2f}</b>", styles["FieldValue"])])
+    item_rows.append(["", "", "", Paragraph("<b>Tax</b>", styles["FieldValue"]),
+                       Paragraph(f"<b>{data.tax_amount:,.2f}</b>", styles["FieldValue"])])
+    item_rows.append(["", "", "", Paragraph("<b>TOTAL</b>", styles["FieldValue"]),
+                       Paragraph(f"<b>{data.total_amount:,.2f}</b>", styles["FieldValue"])])
+
+    it = Table(item_rows, colWidths=[2.2 * inch, 1.0 * inch, 0.7 * inch, 1.5 * inch, 1.5 * inch])
+    it.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d4e6f1")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LINEABOVE", (3, -3), (-1, -3), 0.75, accent),
+    ]))
+    elements.append(it)
+    elements.append(Spacer(1, 8))
+
+    if data.notes:
+        elements.append(Paragraph(f"Notes: {data.notes}", styles["FieldValue"]))
+        elements.append(Spacer(1, 6))
+
+    # Signature
+    elements.append(Paragraph("Authorized Signature: _________________________", styles["FieldValue"]))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph(
+        "We certify that the goods described herein are of the origin stated and that this "
+        "invoice is true and correct in all particulars.",
+        styles["SmallText"]))
+
+    doc.build(elements)
+
+
+# ---------------------------------------------------------------------------
+# Template: Packing List
+# ---------------------------------------------------------------------------
+
+def render_packing_list(data: PackingListData, filepath: str):
+    """Standard packing list — NOT a Bill of Lading."""
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.4 * inch, bottomMargin=0.4 * inch,
+                            leftMargin=0.5 * inch, rightMargin=0.5 * inch)
+    styles = _styles()
+    accent = colors.HexColor("#6c3483")
+    elements = []
+
+    # Header
+    elements.append(Paragraph("PACKING LIST", styles["BolTitle"]))
+    elements.append(Spacer(1, 4))
+
+    hdr_data = [
+        [Paragraph("P/L Number", styles["FieldLabel"]),
+         Paragraph("Date", styles["FieldLabel"]),
+         Paragraph("Invoice Ref.", styles["FieldLabel"])],
+        [Paragraph(data.packing_list_number, styles["FieldValue"]),
+         Paragraph(data.date, styles["FieldValue"]),
+         Paragraph(data.invoice_reference, styles["FieldValue"])],
+    ]
+    ht = Table(hdr_data, colWidths=[2.5 * inch, 2.5 * inch, 2.5 * inch])
+    ht.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f4ecf7")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(ht)
+    elements.append(Spacer(1, 6))
+
+    # Parties
+    party = [
+        [Paragraph("<b>Seller</b>", styles["FieldLabel"]),
+         Paragraph("<b>Buyer</b>", styles["FieldLabel"])],
+        [Paragraph(f"{data.seller_name}<br/>{data.seller_address}", styles["FieldValue"]),
+         Paragraph(f"{data.buyer_name}<br/>{data.buyer_address}", styles["FieldValue"])],
+    ]
+    pt = Table(party, colWidths=[3.75 * inch, 3.75 * inch])
+    pt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(pt)
+    elements.append(Spacer(1, 8))
+
+    # Items table
+    item_header = [
+        Paragraph("#", styles["FieldLabel"]),
+        Paragraph("Description", styles["FieldLabel"]),
+        Paragraph("Qty", styles["FieldLabel"]),
+        Paragraph("Pkg Type", styles["FieldLabel"]),
+        Paragraph("Net Wt (KG)", styles["FieldLabel"]),
+        Paragraph("Gross Wt (KG)", styles["FieldLabel"]),
+        Paragraph("Dimensions", styles["FieldLabel"]),
+    ]
+    item_rows = [item_header]
+    for item in data.items:
+        item_rows.append([
+            Paragraph(str(item.item_number), styles["FieldValue"]),
+            Paragraph(item.description, styles["FieldValue"]),
+            Paragraph(str(item.quantity), styles["FieldValue"]),
+            Paragraph(item.package_type, styles["FieldValue"]),
+            Paragraph(f"{item.net_weight_kg:,.2f}", styles["FieldValue"]),
+            Paragraph(f"{item.gross_weight_kg:,.2f}", styles["FieldValue"]),
+            Paragraph(item.dimensions, styles["FieldValue"]),
+        ])
+    # Totals
+    item_rows.append([
+        Paragraph("<b>TOTAL</b>", styles["FieldValue"]),
+        "",
+        Paragraph(f"<b>{data.total_packages}</b>", styles["FieldValue"]),
+        "",
+        Paragraph(f"<b>{data.total_net_weight_kg:,.2f}</b>", styles["FieldValue"]),
+        Paragraph(f"<b>{data.total_gross_weight_kg:,.2f}</b>", styles["FieldValue"]),
+        "",
+    ])
+
+    it = Table(item_rows, colWidths=[0.4 * inch, 1.7 * inch, 0.6 * inch, 0.9 * inch,
+                                      1.0 * inch, 1.0 * inch, 1.4 * inch])
+    it.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f4ecf7")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.75, accent),
+    ]))
+    elements.append(it)
+    elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph(
+        "This packing list is for reference purposes only and does not constitute a "
+        "contract of carriage or a negotiable document.",
+        styles["SmallText"]))
+
+    doc.build(elements)
+
+
+# ---------------------------------------------------------------------------
+# Template: Delivery Order
+# ---------------------------------------------------------------------------
+
+def render_delivery_order(data: DeliveryOrderData, filepath: str):
+    """Port/carrier delivery order — NOT a Bill of Lading."""
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.4 * inch, bottomMargin=0.4 * inch,
+                            leftMargin=0.5 * inch, rightMargin=0.5 * inch)
+    styles = _styles()
+    accent = colors.HexColor("#b7950b")
+    elements = []
+
+    # Header
+    elements.append(Paragraph("DELIVERY ORDER", styles["BolTitle"]))
+    elements.append(Paragraph(data.carrier_name, styles["BolSubtitle"]))
+    elements.append(Spacer(1, 8))
+
+    # DO info row
+    info_data = [
+        [Paragraph("D/O Number", styles["FieldLabel"]),
+         Paragraph("Date", styles["FieldLabel"]),
+         Paragraph("Vessel / Voyage", styles["FieldLabel"]),
+         Paragraph("Port of Discharge", styles["FieldLabel"])],
+        [Paragraph(data.do_number, styles["FieldValue"]),
+         Paragraph(data.date, styles["FieldValue"]),
+         Paragraph(f"{data.vessel_name} / V.{data.voyage_number}", styles["FieldValue"]),
+         Paragraph(data.port_of_discharge, styles["FieldValue"])],
+    ]
+    info_t = Table(info_data, colWidths=[1.7 * inch, 1.7 * inch, 2.2 * inch, 1.9 * inch])
+    info_t.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef9e7")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(info_t)
+    elements.append(Spacer(1, 6))
+
+    # Consignee / Delivery address
+    party = [
+        [Paragraph("<b>Consignee</b>", styles["FieldLabel"]),
+         Paragraph("<b>Delivery Address</b>", styles["FieldLabel"])],
+        [Paragraph(f"{data.consignee_name}<br/>{data.consignee_address}", styles["FieldValue"]),
+         Paragraph(data.delivery_address, styles["FieldValue"])],
+    ]
+    pt = Table(party, colWidths=[3.75 * inch, 3.75 * inch])
+    pt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(pt)
+    elements.append(Spacer(1, 6))
+
+    # Containers list
+    cont_header = [Paragraph("Container Number", styles["FieldLabel"])]
+    cont_rows = [cont_header]
+    for cn in data.container_numbers:
+        cont_rows.append([Paragraph(cn, styles["FieldValue"])])
+
+    ct = Table(cont_rows, colWidths=[7.5 * inch])
+    ct.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef9e7")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    elements.append(Paragraph("CONTAINERS TO BE RELEASED", styles["FieldLabel"]))
+    elements.append(Spacer(1, 2))
+    elements.append(ct)
+    elements.append(Spacer(1, 6))
+
+    # Release / free time
+    rel_data = [
+        [Paragraph("Release Date", styles["FieldLabel"]),
+         Paragraph("Free Time Expiry", styles["FieldLabel"])],
+        [Paragraph(data.release_date, styles["FieldValue"]),
+         Paragraph(data.free_time_expiry, styles["FieldValue"])],
+    ]
+    rt = Table(rel_data, colWidths=[3.75 * inch, 3.75 * inch])
+    rt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(rt)
+    elements.append(Spacer(1, 8))
+
+    if data.remarks:
+        elements.append(Paragraph(f"Remarks: {data.remarks}", styles["FieldValue"]))
+        elements.append(Spacer(1, 6))
+
+    # Signature
+    elements.append(Paragraph("Authorized by: _________________________", styles["FieldValue"]))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph(
+        "This Delivery Order authorizes the release of the above-mentioned containers. "
+        "It does not constitute a Bill of Lading or any contract of carriage.",
+        styles["SmallText"]))
+
+    doc.build(elements)
+
+
+# ===========================================================================
+# BOL-PARTIAL TEMPLATES (documents containing BoL content/references)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Template: Cover Letter with BoL Summary
+# ---------------------------------------------------------------------------
+
+def render_bol_cover_letter(data: CoverLetterData, filepath: str):
+    """Shipping document cover letter that references and summarizes a BoL."""
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+                            leftMargin=0.75 * inch, rightMargin=0.75 * inch)
+    styles = _styles()
+    accent = colors.HexColor("#2c3e50")
+    elements = []
+
+    # Letter header
+    elements.append(Paragraph(f"<b>{data.sender_company}</b>", styles["BolSubtitle"]))
+    elements.append(Paragraph(data.sender_address, styles["FieldValue"]))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph(data.date, styles["FieldValue"]))
+    elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph(f"{data.recipient_name}", styles["FieldValue"]))
+    elements.append(Paragraph(f"<b>{data.recipient_company}</b>", styles["FieldValue"]))
+    elements.append(Paragraph(data.recipient_address, styles["FieldValue"]))
+    elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph(f"Re: {data.reference_number}", styles["FieldValue"]))
+    elements.append(Spacer(1, 8))
+
+    elements.append(Paragraph(f"Dear {data.recipient_name},", styles["FieldValue"]))
+    elements.append(Spacer(1, 6))
+
+    # Body text
+    for para in data.body_text.split("\n\n"):
+        elements.append(Paragraph(para, styles["FieldValue"]))
+        elements.append(Spacer(1, 6))
+
+    # Enclosed documents list
+    elements.append(Paragraph("<b>Enclosed Documents:</b>", styles["FieldValue"]))
+    for doc_name in data.enclosed_documents:
+        elements.append(Paragraph(f"&bull; {doc_name}", styles["FieldValue"]))
+    elements.append(Spacer(1, 8))
+
+    # BoL summary table (the BoL-partial content)
+    bol = data.bol_data
+    elements.append(Paragraph("<b>Bill of Lading Summary</b>", styles["FieldLabel"]))
+    elements.append(Spacer(1, 4))
+    summary_data = [
+        [Paragraph("B/L Number", styles["FieldLabel"]),
+         Paragraph("Vessel / Voyage", styles["FieldLabel"]),
+         Paragraph("Port of Loading", styles["FieldLabel"]),
+         Paragraph("Port of Discharge", styles["FieldLabel"])],
+        [Paragraph(bol.bol_number, styles["FieldValue"]),
+         Paragraph(f"{bol.vessel_name} / {bol.voyage_number}", styles["FieldValue"]),
+         Paragraph(bol.port_of_loading, styles["FieldValue"]),
+         Paragraph(bol.port_of_discharge, styles["FieldValue"])],
+        [Paragraph("Shipper", styles["FieldLabel"]),
+         Paragraph("Consignee", styles["FieldLabel"]),
+         Paragraph("Total Packages", styles["FieldLabel"]),
+         Paragraph("Total Weight (KG)", styles["FieldLabel"])],
+        [Paragraph(bol.shipper_name, styles["FieldValue"]),
+         Paragraph(bol.consignee_name, styles["FieldValue"]),
+         Paragraph(str(bol.total_packages), styles["FieldValue"]),
+         Paragraph(f"{bol.total_weight_kg:,.2f}", styles["FieldValue"])],
+    ]
+    st = Table(summary_data, colWidths=[1.75 * inch] * 4)
+    st.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eaecee")),
+        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#eaecee")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    elements.append(st)
+    elements.append(Spacer(1, 12))
+
+    # Closing
+    elements.append(Paragraph("Sincerely,", styles["FieldValue"]))
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(data.sender_name, styles["FieldValue"]))
+    elements.append(Paragraph(data.sender_company, styles["FieldValue"]))
+
+    doc.build(elements)
+
+
+# ---------------------------------------------------------------------------
+# Template: Freight Manifest
+# ---------------------------------------------------------------------------
+
+def render_freight_manifest(data: FreightManifestData, filepath: str):
+    """Cargo/freight manifest listing multiple BoLs — contains BoL data as part of it."""
+    doc = SimpleDocTemplate(filepath, pagesize=letter,
+                            topMargin=0.4 * inch, bottomMargin=0.4 * inch,
+                            leftMargin=0.4 * inch, rightMargin=0.4 * inch)
+    styles = _styles()
+    accent = colors.HexColor("#1b4f72")
+    elements = []
+
+    # Header
+    hdr = Table([
+        [Paragraph("CARGO MANIFEST", styles["BolTitle"]),
+         Paragraph(f"Manifest No: <b>{data.manifest_number}</b>", styles["FieldValue"])],
+        [Paragraph(data.shipping_line, styles["BolSubtitle"]),
+         Paragraph(f"Date: {data.date}", styles["FieldValue"])],
+    ], colWidths=[5.2 * inch, 2.5 * inch])
+    hdr.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1.5, accent),
+        ("BACKGROUND", (0, 0), (0, 0), accent),
+        ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
+        ("LINEBELOW", (0, 0), (-1, 0), 1, accent),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(hdr)
+    elements.append(Spacer(1, 6))
+
+    # Vessel / voyage info
+    vessel_data = [
+        [Paragraph("Vessel Name", styles["FieldLabel"]),
+         Paragraph("Voyage No.", styles["FieldLabel"]),
+         Paragraph("Port of Loading", styles["FieldLabel"]),
+         Paragraph("Port of Discharge", styles["FieldLabel"])],
+        [Paragraph(data.vessel_name, styles["FieldValue"]),
+         Paragraph(data.voyage_number, styles["FieldValue"]),
+         Paragraph(data.port_of_loading, styles["FieldValue"]),
+         Paragraph(data.port_of_discharge, styles["FieldValue"])],
+    ]
+    vt = Table(vessel_data, colWidths=[1.925 * inch] * 4)
+    vt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d4e6f1")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    elements.append(vt)
+    elements.append(Spacer(1, 8))
+
+    # BoL entries table
+    elements.append(Paragraph("BILL OF LADING SUMMARY", styles["FieldLabel"]))
+    elements.append(Spacer(1, 2))
+
+    bol_header = [
+        Paragraph("B/L Number", styles["FieldLabel"]),
+        Paragraph("Shipper", styles["FieldLabel"]),
+        Paragraph("Consignee", styles["FieldLabel"]),
+        Paragraph("Containers", styles["FieldLabel"]),
+        Paragraph("Weight (KG)", styles["FieldLabel"]),
+        Paragraph("Commodity", styles["FieldLabel"]),
+    ]
+    bol_rows = [bol_header]
+    for entry in data.entries:
+        bol_rows.append([
+            Paragraph(entry.bol_number, styles["FieldValue"]),
+            Paragraph(entry.shipper, styles["FieldValue"]),
+            Paragraph(entry.consignee, styles["FieldValue"]),
+            Paragraph(str(entry.containers), styles["FieldValue"]),
+            Paragraph(f"{entry.weight_kg:,.2f}", styles["FieldValue"]),
+            Paragraph(entry.commodity, styles["FieldValue"]),
+        ])
+    # Totals
+    bol_rows.append([
+        Paragraph(f"<b>TOTAL ({len(data.entries)} B/Ls)</b>", styles["FieldValue"]),
+        "", "",
+        Paragraph(f"<b>{data.total_containers}</b>", styles["FieldValue"]),
+        Paragraph(f"<b>{data.total_weight_kg:,.2f}</b>", styles["FieldValue"]),
+        "",
+    ])
+
+    bt = Table(bol_rows, colWidths=[1.3 * inch, 1.3 * inch, 1.3 * inch, 0.8 * inch,
+                                     1.2 * inch, 1.5 * inch])
+    bt.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.75, accent),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d4e6f1")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.75, accent),
+    ]))
+    elements.append(bt)
+    elements.append(Spacer(1, 10))
+
+    # Footer
+    elements.append(Paragraph(
+        "This Cargo Manifest is prepared for customs and port authority use. "
+        "It lists all Bills of Lading for the above vessel and voyage. "
+        "This document itself is not a Bill of Lading and does not confer title to goods.",
+        styles["SmallText"]))
+
+    doc.build(elements)
+
+
 # ---------------------------------------------------------------------------
 # Template registry
 # ---------------------------------------------------------------------------
@@ -749,3 +1312,25 @@ TEMPLATES = {
     "short": render_short_bol,
     "multimodal": render_multimodal_bol,
 }
+
+NON_BOL_TEMPLATES = {
+    "commercial_invoice": render_commercial_invoice,
+    "packing_list": render_packing_list,
+    "delivery_order": render_delivery_order,
+}
+
+BOL_PARTIAL_TEMPLATES = {
+    "bol_cover_letter": render_bol_cover_letter,
+    "freight_manifest": render_freight_manifest,
+}
+
+ALL_TEMPLATES = {**TEMPLATES, **NON_BOL_TEMPLATES, **BOL_PARTIAL_TEMPLATES}
+
+# Maps each template name to its document category
+TEMPLATE_CATEGORIES = {}
+for t in TEMPLATES:
+    TEMPLATE_CATEGORIES[t] = "bol"
+for t in NON_BOL_TEMPLATES:
+    TEMPLATE_CATEGORIES[t] = "non_bol"
+for t in BOL_PARTIAL_TEMPLATES:
+    TEMPLATE_CATEGORIES[t] = "bol_partial"

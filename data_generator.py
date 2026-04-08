@@ -58,6 +58,26 @@ SHIPPING_LINES = [
 
 INCOTERMS = ["FOB", "CIF", "CFR", "EXW", "FCA", "DAP", "DDP", "CPT", "CIP"]
 
+CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CNY", "CHF", "CAD", "AUD"]
+
+PAYMENT_TERMS = [
+    "Net 30", "Net 60", "Net 90", "Due on Receipt",
+    "Letter of Credit", "Cash in Advance", "Open Account",
+]
+
+HS_CODES = [
+    "8471.30", "6006.32", "8708.99", "8479.89", "2917.39",
+    "7210.49", "3901.20", "4802.55", "9401.61", "1602.49",
+    "0303.89", "4016.99", "7005.29", "6907.23", "9503.00",
+    "3006.60", "8516.60", "6403.99", "6204.62", "4415.20",
+]
+
+COUNTRIES_OF_ORIGIN = [
+    "China", "United States", "Germany", "Japan", "South Korea",
+    "India", "Vietnam", "Taiwan", "Thailand", "Malaysia",
+    "Indonesia", "Brazil", "Mexico", "Italy", "France",
+]
+
 TRUCK_CARRIERS = [
     "J.B. Hunt Transport Services", "Schneider National", "Werner Enterprises",
     "XPO Logistics", "Swift Transportation", "Knight-Swift", "Landstar System",
@@ -221,3 +241,329 @@ def generate_bol_data(template_type: str = "ocean") -> BolData:
         total_volume_cbm=total_vol,
     )
     return data
+
+
+# ---------------------------------------------------------------------------
+# Non-BoL document data
+# ---------------------------------------------------------------------------
+
+@dataclass
+class InvoiceLineItem:
+    description: str
+    hs_code: str
+    quantity: int
+    unit_price: float
+    total_price: float
+
+
+@dataclass
+class InvoiceData:
+    invoice_number: str
+    invoice_date: str
+    seller_name: str
+    seller_address: str
+    buyer_name: str
+    buyer_address: str
+    currency: str
+    payment_terms: str
+    country_of_origin: str
+    incoterm: str
+    line_items: list = field(default_factory=list)
+    subtotal: float = 0.0
+    tax_amount: float = 0.0
+    total_amount: float = 0.0
+    notes: str = ""
+
+
+@dataclass
+class PackingListItem:
+    item_number: int
+    description: str
+    quantity: int
+    package_type: str
+    net_weight_kg: float
+    gross_weight_kg: float
+    dimensions: str
+
+
+@dataclass
+class PackingListData:
+    packing_list_number: str
+    date: str
+    seller_name: str
+    seller_address: str
+    buyer_name: str
+    buyer_address: str
+    invoice_reference: str
+    items: list = field(default_factory=list)
+    total_packages: int = 0
+    total_net_weight_kg: float = 0.0
+    total_gross_weight_kg: float = 0.0
+
+
+@dataclass
+class DeliveryOrderData:
+    do_number: str
+    date: str
+    carrier_name: str
+    consignee_name: str
+    consignee_address: str
+    delivery_address: str
+    vessel_name: str
+    voyage_number: str
+    port_of_discharge: str
+    container_numbers: list = field(default_factory=list)
+    release_date: str = ""
+    free_time_expiry: str = ""
+    remarks: str = ""
+
+
+# ---------------------------------------------------------------------------
+# BoL-partial document data
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CoverLetterData:
+    date: str
+    sender_name: str
+    sender_company: str
+    sender_address: str
+    recipient_name: str
+    recipient_company: str
+    recipient_address: str
+    reference_number: str
+    bol_data: BolData = None
+    enclosed_documents: list = field(default_factory=list)
+    body_text: str = ""
+
+
+@dataclass
+class FreightManifestEntry:
+    bol_number: str
+    shipper: str
+    consignee: str
+    port_of_loading: str
+    port_of_discharge: str
+    containers: int
+    weight_kg: float
+    commodity: str
+
+
+@dataclass
+class FreightManifestData:
+    manifest_number: str
+    vessel_name: str
+    voyage_number: str
+    date: str
+    port_of_loading: str
+    port_of_discharge: str
+    shipping_line: str
+    entries: list = field(default_factory=list)
+    total_containers: int = 0
+    total_weight_kg: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Non-BoL data generators
+# ---------------------------------------------------------------------------
+
+def _gen_invoice_number() -> str:
+    prefix = random.choice(["INV", "CI", "CINV"])
+    return f"{prefix}-{random.randint(100000, 999999)}"
+
+
+def _gen_packing_list_number() -> str:
+    return f"PL-{random.randint(100000, 999999)}"
+
+
+def _gen_do_number() -> str:
+    return f"DO-{random.randint(100000, 999999)}"
+
+
+def _gen_manifest_number() -> str:
+    return f"MFT-{random.randint(10000, 99999)}"
+
+
+def generate_invoice_data() -> InvoiceData:
+    """Generate random commercial invoice data."""
+    num_items = random.randint(2, 8)
+    items = []
+    for _ in range(num_items):
+        qty = random.randint(10, 500)
+        unit_price = round(random.uniform(5.0, 500.0), 2)
+        items.append(InvoiceLineItem(
+            description=random.choice(COMMODITIES),
+            hs_code=random.choice(HS_CODES),
+            quantity=qty,
+            unit_price=unit_price,
+            total_price=round(qty * unit_price, 2),
+        ))
+    subtotal = round(sum(i.total_price for i in items), 2)
+    tax = round(subtotal * random.uniform(0.0, 0.15), 2)
+
+    issue_date = fake.date_between(start_date="-2y", end_date="today")
+    return InvoiceData(
+        invoice_number=_gen_invoice_number(),
+        invoice_date=issue_date.strftime("%B %d, %Y"),
+        seller_name=fake.company(),
+        seller_address=fake.address().replace("\n", ", "),
+        buyer_name=fake.company(),
+        buyer_address=fake.address().replace("\n", ", "),
+        currency=random.choice(CURRENCIES),
+        payment_terms=random.choice(PAYMENT_TERMS),
+        country_of_origin=random.choice(COUNTRIES_OF_ORIGIN),
+        incoterm=random.choice(INCOTERMS),
+        line_items=items,
+        subtotal=subtotal,
+        tax_amount=tax,
+        total_amount=round(subtotal + tax, 2),
+        notes=random.choice([
+            "", "",
+            "All goods are of domestic origin.",
+            "Payment due per agreed terms.",
+            "Prices quoted in the agreed currency.",
+        ]),
+    )
+
+
+def generate_packing_list_data() -> PackingListData:
+    """Generate random packing list data."""
+    num_items = random.randint(3, 10)
+    items = []
+    for idx in range(1, num_items + 1):
+        net = round(random.uniform(5, 500), 2)
+        gross = round(net * random.uniform(1.05, 1.30), 2)
+        dims = f"{random.randint(20,120)}x{random.randint(20,80)}x{random.randint(10,60)} cm"
+        items.append(PackingListItem(
+            item_number=idx,
+            description=random.choice(COMMODITIES),
+            quantity=random.randint(1, 200),
+            package_type=random.choice(PACKAGE_TYPES),
+            net_weight_kg=net,
+            gross_weight_kg=gross,
+            dimensions=dims,
+        ))
+    issue_date = fake.date_between(start_date="-2y", end_date="today")
+    return PackingListData(
+        packing_list_number=_gen_packing_list_number(),
+        date=issue_date.strftime("%B %d, %Y"),
+        seller_name=fake.company(),
+        seller_address=fake.address().replace("\n", ", "),
+        buyer_name=fake.company(),
+        buyer_address=fake.address().replace("\n", ", "),
+        invoice_reference=_gen_invoice_number(),
+        items=items,
+        total_packages=sum(i.quantity for i in items),
+        total_net_weight_kg=round(sum(i.net_weight_kg for i in items), 2),
+        total_gross_weight_kg=round(sum(i.gross_weight_kg for i in items), 2),
+    )
+
+
+def generate_delivery_order_data() -> DeliveryOrderData:
+    """Generate random delivery order data."""
+    port = random.choice(PORTS)
+    issue_date = fake.date_between(start_date="-2y", end_date="today")
+    release_date = fake.date_between(start_date=issue_date, end_date="+10d")
+    free_time = fake.date_between(start_date=release_date, end_date="+14d")
+    num_containers = random.randint(1, 4)
+    return DeliveryOrderData(
+        do_number=_gen_do_number(),
+        date=issue_date.strftime("%B %d, %Y"),
+        carrier_name=random.choice(SHIPPING_LINES),
+        consignee_name=fake.company(),
+        consignee_address=fake.address().replace("\n", ", "),
+        delivery_address=fake.address().replace("\n", ", "),
+        vessel_name=random.choice(VESSEL_NAMES),
+        voyage_number=_gen_voyage_number(),
+        port_of_discharge=port,
+        container_numbers=[_gen_container_number() for _ in range(num_containers)],
+        release_date=release_date.strftime("%B %d, %Y"),
+        free_time_expiry=free_time.strftime("%B %d, %Y"),
+        remarks=random.choice([
+            "", "",
+            "Subject to payment of all charges.",
+            "Release upon presentation of original documents.",
+            "Containers to be returned within free time.",
+        ]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# BoL-partial data generators
+# ---------------------------------------------------------------------------
+
+def generate_cover_letter_data() -> CoverLetterData:
+    """Generate cover letter data that references and summarizes a BoL."""
+    bol = generate_bol_data(template_type="ocean")
+    issue_date = fake.date_between(start_date="-2y", end_date="today")
+    enclosed = random.sample([
+        "Original Bill of Lading (3/3)",
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin",
+        "Insurance Certificate",
+        "Inspection Certificate",
+        "Fumigation Certificate",
+    ], k=random.randint(3, 5))
+    body = (
+        f"Please find enclosed the shipping documents for B/L No. {bol.bol_number}, "
+        f"covering a shipment of goods from {bol.port_of_loading} to "
+        f"{bol.port_of_discharge} aboard the vessel {bol.vessel_name} "
+        f"(Voyage {bol.voyage_number}).\n\n"
+        f"The shipment consists of {bol.total_packages} packages with a total "
+        f"gross weight of {bol.total_weight_kg:,.2f} KG.\n\n"
+        "Please arrange for the collection and clearance of the cargo upon arrival. "
+        "Should you have any questions, please do not hesitate to contact us."
+    )
+    return CoverLetterData(
+        date=issue_date.strftime("%B %d, %Y"),
+        sender_name=fake.name(),
+        sender_company=bol.shipping_line,
+        sender_address=fake.address().replace("\n", ", "),
+        recipient_name=fake.name(),
+        recipient_company=bol.consignee_name,
+        recipient_address=bol.consignee_address,
+        reference_number=f"REF-{random.randint(100000, 999999)}",
+        bol_data=bol,
+        enclosed_documents=enclosed,
+        body_text=body,
+    )
+
+
+def generate_freight_manifest_data() -> FreightManifestData:
+    """Generate a freight manifest listing multiple BoLs."""
+    vessel = random.choice(VESSEL_NAMES)
+    voyage = _gen_voyage_number()
+    port_load = random.choice(PORTS)
+    port_disc = random.choice([p for p in PORTS if p != port_load])
+    line = random.choice(SHIPPING_LINES)
+    issue_date = fake.date_between(start_date="-2y", end_date="today")
+
+    num_entries = random.randint(5, 15)
+    entries = []
+    for _ in range(num_entries):
+        num_cont = random.randint(1, 4)
+        wt = round(random.uniform(5000, 80000), 2)
+        entries.append(FreightManifestEntry(
+            bol_number=_gen_bol_number(),
+            shipper=fake.company(),
+            consignee=fake.company(),
+            port_of_loading=port_load,
+            port_of_discharge=port_disc,
+            containers=num_cont,
+            weight_kg=wt,
+            commodity=random.choice(COMMODITIES),
+        ))
+
+    return FreightManifestData(
+        manifest_number=_gen_manifest_number(),
+        vessel_name=vessel,
+        voyage_number=voyage,
+        date=issue_date.strftime("%B %d, %Y"),
+        port_of_loading=port_load,
+        port_of_discharge=port_disc,
+        shipping_line=line,
+        entries=entries,
+        total_containers=sum(e.containers for e in entries),
+        total_weight_kg=round(sum(e.weight_kg for e in entries), 2),
+    )

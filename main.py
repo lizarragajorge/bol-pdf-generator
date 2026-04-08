@@ -1,5 +1,5 @@
 """
-BoL PDF Generator — Generate Bill of Lading PDFs for testing/scoring a BoL classifier.
+BoL PDF Generator — Generate Bill of Lading and related PDFs for testing/scoring a BoL classifier.
 
 Usage:
     python main.py                          # 10 PDFs, mixed templates, output to ./output
@@ -8,6 +8,9 @@ Usage:
     python main.py -n 30 -t ocean,truck    # 30 PDFs split across ocean & truck templates
     python main.py -o my_folder            # custom output directory
     python main.py --seed 42               # reproducible generation
+    python main.py -c non_bol              # only non-BoL documents (invoices, packing lists, etc.)
+    python main.py -c bol_partial          # documents containing BoL content
+    python main.py -c all                  # all categories (bol + non_bol + bol_partial)
 """
 
 import argparse
@@ -15,13 +18,41 @@ import os
 import random
 import sys
 
-from data_generator import generate_bol_data
-from templates import TEMPLATES
+from data_generator import (
+    generate_bol_data, generate_invoice_data, generate_packing_list_data,
+    generate_delivery_order_data, generate_cover_letter_data,
+    generate_freight_manifest_data,
+)
+from templates import (
+    TEMPLATES, NON_BOL_TEMPLATES, BOL_PARTIAL_TEMPLATES,
+    ALL_TEMPLATES, TEMPLATE_CATEGORIES,
+)
+
+# Category -> set of template names
+CATEGORY_TEMPLATES = {
+    "bol": TEMPLATES,
+    "non_bol": NON_BOL_TEMPLATES,
+    "bol_partial": BOL_PARTIAL_TEMPLATES,
+    "all": ALL_TEMPLATES,
+}
+
+# Template name -> data generator function
+DATA_GENERATORS = {
+    "ocean": lambda: generate_bol_data("ocean"),
+    "truck": lambda: generate_bol_data("truck"),
+    "short": lambda: generate_bol_data("short"),
+    "multimodal": lambda: generate_bol_data("multimodal"),
+    "commercial_invoice": generate_invoice_data,
+    "packing_list": generate_packing_list_data,
+    "delivery_order": generate_delivery_order_data,
+    "bol_cover_letter": generate_cover_letter_data,
+    "freight_manifest": generate_freight_manifest_data,
+}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate Bill of Lading PDFs for classifier testing."
+        description="Generate Bill of Lading and related PDFs for classifier testing."
     )
     parser.add_argument(
         "-n", "--count", type=int, default=10,
@@ -30,8 +61,13 @@ def parse_args():
     parser.add_argument(
         "-t", "--templates", type=str, default=None,
         help="Comma-separated list of template types to use. "
-             f"Available: {', '.join(TEMPLATES.keys())}. "
-             "Default: all templates."
+             f"Available: {', '.join(ALL_TEMPLATES.keys())}. "
+             "Default: determined by --category."
+    )
+    parser.add_argument(
+        "-c", "--category", type=str, default="bol",
+        help="Document category: bol, non_bol, bol_partial, all (default: bol). "
+             "Ignored when --templates is specified."
     )
     parser.add_argument(
         "-o", "--output", type=str, default="output",
@@ -54,38 +90,60 @@ def main():
     if args.templates:
         template_names = [t.strip() for t in args.templates.split(",")]
         for t in template_names:
-            if t not in TEMPLATES:
-                print(f"Error: Unknown template '{t}'. Available: {', '.join(TEMPLATES.keys())}")
+            if t not in ALL_TEMPLATES:
+                print(f"Error: Unknown template '{t}'. Available: {', '.join(ALL_TEMPLATES.keys())}")
                 sys.exit(1)
     else:
-        template_names = list(TEMPLATES.keys())
+        if args.category not in CATEGORY_TEMPLATES:
+            print(f"Error: Unknown category '{args.category}'. Available: {', '.join(CATEGORY_TEMPLATES.keys())}")
+            sys.exit(1)
+        template_names = list(CATEGORY_TEMPLATES[args.category].keys())
 
     # Create output directory
     os.makedirs(args.output, exist_ok=True)
 
-    print(f"Generating {args.count} BoL PDFs using templates: {', '.join(template_names)}")
+    print(f"Generating {args.count} PDFs using templates: {', '.join(template_names)}")
     print(f"Output directory: {os.path.abspath(args.output)}")
     print()
 
     # Generate manifest for classifier evaluation
-    manifest_lines = ["filename,template_type,bol_number,shipper,consignee"]
+    manifest_lines = ["filename,template_type,category,is_bol,identifier"]
 
     for i in range(1, args.count + 1):
         template_name = random.choice(template_names)
-        data = generate_bol_data(template_type=template_name)
+        category = TEMPLATE_CATEGORIES[template_name]
+        is_bol = "yes" if category == "bol" else "no"
 
-        filename = f"bol_{i:04d}_{template_name}.pdf"
+        # Generate data using the appropriate generator
+        data = DATA_GENERATORS[template_name]()
+
+        filename = f"doc_{i:04d}_{template_name}.pdf"
         filepath = os.path.join(args.output, filename)
 
-        render_fn = TEMPLATES[template_name]
+        render_fn = ALL_TEMPLATES[template_name]
         render_fn(data, filepath)
 
+        # Extract a meaningful identifier from the data
+        if hasattr(data, "bol_number"):
+            identifier = data.bol_number
+        elif hasattr(data, "invoice_number"):
+            identifier = data.invoice_number
+        elif hasattr(data, "packing_list_number"):
+            identifier = data.packing_list_number
+        elif hasattr(data, "do_number"):
+            identifier = data.do_number
+        elif hasattr(data, "reference_number"):
+            identifier = data.reference_number
+        elif hasattr(data, "manifest_number"):
+            identifier = data.manifest_number
+        else:
+            identifier = ""
+
         manifest_lines.append(
-            f"{filename},{template_name},{data.bol_number},"
-            f"\"{data.shipper_name}\",\"{data.consignee_name}\""
+            f"{filename},{template_name},{category},{is_bol},{identifier}"
         )
 
-        print(f"  [{i}/{args.count}] {filename}  ({template_name})")
+        print(f"  [{i}/{args.count}] {filename}  ({template_name} | {category})")
 
     # Write manifest CSV
     manifest_path = os.path.join(args.output, "manifest.csv")

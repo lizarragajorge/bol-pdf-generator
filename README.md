@@ -1,10 +1,12 @@
 # BoL PDF Generator
 
-Generate synthetic Bill of Lading (BoL) PDFs for testing and scoring document classifiers — built for use with Azure AI Content Understanding Studio and similar pipelines.
+Generate synthetic Bill of Lading (BoL) and related shipping document PDFs for testing and scoring document classifiers — built for use with Azure AI Content Understanding Studio and similar pipelines.
 
 ## Features
 
-- **4 distinct templates** with different visual layouts, colors, and field arrangements:
+- **9 distinct templates** across 3 document categories:
+
+  **BoL templates** (`-c bol`) — actual Bills of Lading:
   | Template | Description |
   |----------|-------------|
   | `ocean` | Classic ocean freight BoL — 3-party header, vessel/port routing, container cargo table |
@@ -12,8 +14,21 @@ Generate synthetic Bill of Lading (BoL) PDFs for testing and scoring document cl
   | `short` | Compact single-page non-negotiable short-form BoL |
   | `multimodal` | FIATA-style combined transport BoL with pre/on-carriage legs (A4) |
 
+  **Non-BoL templates** (`-c non_bol`) — negative examples for classifier training:
+  | Template | Description |
+  |----------|-------------|
+  | `commercial_invoice` | Standard commercial invoice with line items, HS codes, and totals |
+  | `packing_list` | Packing list with item dimensions, weights, and package types |
+  | `delivery_order` | Port/carrier delivery order for container release |
+
+  **BoL-partial templates** (`-c bol_partial`) — documents that reference or contain BoL data:
+  | Template | Description |
+  |----------|-------------|
+  | `bol_cover_letter` | Cover letter that references and summarizes a full BoL |
+  | `freight_manifest` | Cargo manifest listing multiple BoL numbers and shipment details |
+
 - **Randomized data** — shipper/consignee companies, addresses, vessel names, ports, container numbers, commodities, weights, and volumes via [Faker](https://github.com/joke2k/faker)
-- **Ground-truth manifest** — each run produces a `manifest.csv` mapping every filename to its template type, BoL number, shipper, and consignee for classifier evaluation
+- **Ground-truth manifest** — each run produces a `manifest.csv` with `category` and `is_bol` labels for classifier evaluation
 - **Reproducible** — optional `--seed` flag for deterministic output
 
 ## Quick Start
@@ -30,8 +45,9 @@ python main.py [OPTIONS]
 
 Options:
   -n, --count N          Number of PDFs to generate (default: 10)
-  -t, --templates LIST   Comma-separated template types: ocean, truck, short, multimodal
-                         (default: all)
+  -c, --category CAT     Document category: bol, non_bol, bol_partial, all
+                         (default: bol). Ignored when --templates is specified.
+  -t, --templates LIST   Comma-separated template types (see table above)
   -o, --output DIR       Output directory (default: ./output)
   --seed N               Random seed for reproducible generation
 ```
@@ -39,27 +55,35 @@ Options:
 ### Examples
 
 ```bash
-# Generate 10 PDFs using all templates
+# Generate 10 BoL PDFs using all BoL templates (default)
 python main.py
 
 # Generate 50 ocean-only BoLs
 python main.py -n 50 -t ocean
 
-# Mix of ocean and truck, reproducible
-python main.py -n 30 -t ocean,truck --seed 42
+# Generate non-BoL documents (invoices, packing lists, delivery orders)
+python main.py -n 20 -c non_bol -o output/non_bol
 
-# Custom output folder
-python main.py -n 20 -o test_data
+# Generate BoL-partial documents (cover letters, freight manifests)
+python main.py -n 20 -c bol_partial -o output/bol_partial
+
+# Generate all document types
+python main.py -n 30 -c all
+
+# Mix specific templates across categories
+python main.py -n 20 -t ocean,commercial_invoice,freight_manifest
+
+# Reproducible generation
+python main.py -n 30 -c all --seed 42
 ```
 
 ## Output
 
 ```
 output/
-├── bol_0001_ocean.pdf
-├── bol_0002_truck.pdf
-├── bol_0003_short.pdf
-├── bol_0004_multimodal.pdf
+├── doc_0001_ocean.pdf
+├── doc_0002_commercial_invoice.pdf
+├── doc_0003_bol_cover_letter.pdf
 ├── ...
 └── manifest.csv
 ```
@@ -67,8 +91,10 @@ output/
 The `manifest.csv` contains:
 
 ```csv
-filename,template_type,bol_number,shipper,consignee
-bol_0001_ocean.pdf,ocean,MSKU914763202,"Roberts-Lee","Edwards, Hogan and Wright"
+filename,template_type,category,is_bol,identifier
+doc_0001_ocean.pdf,ocean,bol,yes,MSKU914763202
+doc_0002_commercial_invoice.pdf,commercial_invoice,non_bol,no,INV-482910
+doc_0003_bol_cover_letter.pdf,bol_cover_letter,bol_partial,no,REF-319204
 ```
 
 ## Project Structure
@@ -76,7 +102,7 @@ bol_0001_ocean.pdf,ocean,MSKU914763202,"Roberts-Lee","Edwards, Hogan and Wright"
 ```
 bol-pdf-generator/
 ├── main.py            # CLI entry point
-├── data_generator.py  # Random BoL data generation
+├── data_generator.py  # Random data generation for all document types
 ├── templates.py       # PDF rendering templates (ReportLab)
 ├── requirements.txt
 ├── LICENSE
