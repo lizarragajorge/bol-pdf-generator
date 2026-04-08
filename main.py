@@ -42,11 +42,17 @@ DATA_GENERATORS = {
     "truck": lambda: generate_bol_data("truck"),
     "short": lambda: generate_bol_data("short"),
     "multimodal": lambda: generate_bol_data("multimodal"),
+    "ocean_multi": lambda: generate_bol_data("ocean_multi"),
+    "truck_multi": lambda: generate_bol_data("truck_multi"),
     "commercial_invoice": generate_invoice_data,
     "packing_list": generate_packing_list_data,
     "delivery_order": generate_delivery_order_data,
+    "commercial_invoice_multi": lambda: generate_invoice_data(multi=True),
+    "packing_list_multi": lambda: generate_packing_list_data(multi=True),
     "bol_cover_letter": generate_cover_letter_data,
     "freight_manifest": generate_freight_manifest_data,
+    "bol_cover_letter_multi": lambda: generate_cover_letter_data(multi=True),
+    "freight_manifest_multi": lambda: generate_freight_manifest_data(multi=True),
 }
 
 
@@ -117,7 +123,8 @@ def main():
         # Generate data using the appropriate generator
         data = DATA_GENERATORS[template_name]()
 
-        filename = f"doc_{i:04d}_{template_name}.pdf"
+        pages = "multipage" if "_multi" in template_name else "singlepage"
+        filename = f"{category}_{i:04d}_{template_name}_{pages}.pdf"
         filepath = os.path.join(args.output, filename)
 
         render_fn = ALL_TEMPLATES[template_name]

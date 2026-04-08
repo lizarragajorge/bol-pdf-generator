@@ -184,8 +184,16 @@ def generate_container() -> ContainerInfo:
 
 
 def generate_bol_data(template_type: str = "ocean") -> BolData:
-    """Generate random BoL data. template_type: ocean, truck, short, multimodal."""
-    num_containers = random.randint(1, 4) if template_type != "truck" else 0
+    """Generate random BoL data. template_type: ocean, truck, short, multimodal, ocean_multi, truck_multi."""
+    is_multi = template_type.endswith("_multi")
+    base_type = template_type.removesuffix("_multi")
+
+    if base_type == "truck":
+        num_containers = 0
+    elif is_multi:
+        num_containers = random.randint(6, 12)
+    else:
+        num_containers = random.randint(1, 4)
     containers = [generate_container() for _ in range(num_containers)]
 
     port_loading = random.choice(PORTS)
@@ -198,7 +206,7 @@ def generate_bol_data(template_type: str = "ocean") -> BolData:
     total_wt = round(sum(c.gross_weight_kg for c in containers), 2)
     total_vol = round(sum(c.volume_cbm for c in containers), 2)
 
-    if template_type == "truck":
+    if base_type == "truck":
         total_pkgs = random.randint(10, 500)
         total_wt = round(random.uniform(500, 20000), 2)
         total_vol = round(random.uniform(5, 80), 2)
@@ -230,12 +238,12 @@ def generate_bol_data(template_type: str = "ocean") -> BolData:
             "FRAGILE - DO NOT STACK", "HAZARDOUS MATERIAL - CLASS 3",
             "NOTIFY CONSIGNEE UPON ARRIVAL",
         ]),
-        carrier_name=random.choice(TRUCK_CARRIERS) if template_type == "truck" else "",
-        trailer_number=_gen_trailer_number() if template_type == "truck" else "",
-        driver_name=fake.name() if template_type == "truck" else "",
-        pro_number=_gen_pro_number() if template_type == "truck" else "",
-        origin_city=fake.city() + ", " + fake.state_abbr() if template_type == "truck" else "",
-        destination_city=fake.city() + ", " + fake.state_abbr() if template_type == "truck" else "",
+        carrier_name=random.choice(TRUCK_CARRIERS) if base_type == "truck" else "",
+        trailer_number=_gen_trailer_number() if base_type == "truck" else "",
+        driver_name=fake.name() if base_type == "truck" else "",
+        pro_number=_gen_pro_number() if base_type == "truck" else "",
+        origin_city=fake.city() + ", " + fake.state_abbr() if base_type == "truck" else "",
+        destination_city=fake.city() + ", " + fake.state_abbr() if base_type == "truck" else "",
         total_packages=total_pkgs,
         total_weight_kg=total_wt,
         total_volume_cbm=total_vol,
@@ -384,9 +392,9 @@ def _gen_manifest_number() -> str:
     return f"MFT-{random.randint(10000, 99999)}"
 
 
-def generate_invoice_data() -> InvoiceData:
+def generate_invoice_data(multi: bool = False) -> InvoiceData:
     """Generate random commercial invoice data."""
-    num_items = random.randint(2, 8)
+    num_items = random.randint(15, 30) if multi else random.randint(2, 8)
     items = []
     for _ in range(num_items):
         qty = random.randint(10, 500)
@@ -426,9 +434,9 @@ def generate_invoice_data() -> InvoiceData:
     )
 
 
-def generate_packing_list_data() -> PackingListData:
+def generate_packing_list_data(multi: bool = False) -> PackingListData:
     """Generate random packing list data."""
-    num_items = random.randint(3, 10)
+    num_items = random.randint(20, 40) if multi else random.randint(3, 10)
     items = []
     for idx in range(1, num_items + 1):
         net = round(random.uniform(5, 500), 2)
@@ -492,9 +500,9 @@ def generate_delivery_order_data() -> DeliveryOrderData:
 # BoL-partial data generators
 # ---------------------------------------------------------------------------
 
-def generate_cover_letter_data() -> CoverLetterData:
+def generate_cover_letter_data(multi: bool = False) -> CoverLetterData:
     """Generate cover letter data that references and summarizes a BoL."""
-    bol = generate_bol_data(template_type="ocean")
+    bol = generate_bol_data(template_type="ocean_multi" if multi else "ocean")
     issue_date = fake.date_between(start_date="-2y", end_date="today")
     enclosed = random.sample([
         "Original Bill of Lading (3/3)",
@@ -530,7 +538,7 @@ def generate_cover_letter_data() -> CoverLetterData:
     )
 
 
-def generate_freight_manifest_data() -> FreightManifestData:
+def generate_freight_manifest_data(multi: bool = False) -> FreightManifestData:
     """Generate a freight manifest listing multiple BoLs."""
     vessel = random.choice(VESSEL_NAMES)
     voyage = _gen_voyage_number()
@@ -539,7 +547,7 @@ def generate_freight_manifest_data() -> FreightManifestData:
     line = random.choice(SHIPPING_LINES)
     issue_date = fake.date_between(start_date="-2y", end_date="today")
 
-    num_entries = random.randint(5, 15)
+    num_entries = random.randint(30, 50) if multi else random.randint(5, 15)
     entries = []
     for _ in range(num_entries):
         num_cont = random.randint(1, 4)

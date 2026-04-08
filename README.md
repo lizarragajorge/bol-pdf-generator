@@ -4,7 +4,7 @@ Generate synthetic Bill of Lading (BoL) and related shipping document PDFs for t
 
 ## Features
 
-- **9 distinct templates** across 3 document categories:
+- **13 distinct templates** across 3 document categories:
 
   **BoL templates** (`-c bol`) — actual Bills of Lading:
   | Template | Description |
@@ -13,6 +13,8 @@ Generate synthetic Bill of Lading (BoL) and related shipping document PDFs for t
   | `truck` | US-style straight inland BoL — carrier/driver info, NMFC classes, freight charges |
   | `short` | Compact single-page non-negotiable short-form BoL |
   | `multimodal` | FIATA-style combined transport BoL with pre/on-carriage legs (A4) |
+  | `ocean_multi` | Multi-page ocean BoL — 6-12 containers + full Terms & Conditions back page |
+  | `truck_multi` | Multi-page truck BoL — 15-30 line items + Terms & Conditions page |
 
   **Non-BoL templates** (`-c non_bol`) — negative examples for classifier training:
   | Template | Description |
@@ -20,6 +22,8 @@ Generate synthetic Bill of Lading (BoL) and related shipping document PDFs for t
   | `commercial_invoice` | Standard commercial invoice with line items, HS codes, and totals |
   | `packing_list` | Packing list with item dimensions, weights, and package types |
   | `delivery_order` | Port/carrier delivery order for container release |
+  | `commercial_invoice_multi` | Multi-page invoice — 15-30 line items + Terms & Conditions page |
+  | `packing_list_multi` | Multi-page packing list — 20-40 items + Terms & Conditions page |
 
   **BoL-partial templates** (`-c bol_partial`) — documents that reference or contain BoL data:
   | Template | Description |
